@@ -1,4 +1,5 @@
 import uuid
+import logging
 from fastapi import FastAPI, Depends, HTTPException, Request
 from dotenv import load_dotenv
 from app.schemas import IngestReq, HoverReq, HoverResp, SelectReq, SelectResp, CloneReq, CloneResp
@@ -9,6 +10,9 @@ from fastapi.responses import StreamingResponse
 from app import stream
 import json
 from app.ingest import ingest_repo
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Load environment variables from .env file (project root)
 load_dotenv(dotenv_path="../.env")
@@ -31,13 +35,42 @@ def status(repo: str, prNumber: int, commit: str):
 @app.post("/select")
 async def select_code(req: SelectReq, request: Request):
     try:
-        # we might be able to pass the context in here!
+        # Fetch related context from ChromaDB
+        related_snippets = []
+        try:
+            # Generate collection name based on repo info
+            coll_name = retrieval.collection_name(f"{req.owner}/{req.repo}", 1, "main")
+            
+            # Search for similar code snippets using the selected text as query
+            search_results = retrieval.search_similar_code(
+                collection_name=coll_name,
+                query=req.selected_text,
+                n_results=5
+            )
+            
+            if search_results and 'documents' in search_results:
+                # Format search results for the prompt
+                for i in range(len(search_results['documents'])):
+                    if i < len(search_results['documents']):
+                        snippet = {
+                            'documents': [search_results['documents'][i]],
+                            'metadatas': [search_results['metadatas'][i]] if search_results.get('metadatas') and i < len(search_results['metadatas']) else [{}]
+                        }
+                        related_snippets.append(snippet)
+                        
+            logging.info(f"Found {len(related_snippets)} related code snippets for context")
+            
+        except Exception as e:
+            logging.warning(f"Failed to fetch context from ChromaDB: {e}")
+            # Continue without context if vector search fails
+        
+        # Build messages with context
         messages = prompt.build_messages(
             repo=f"{req.owner}/{req.repo}",
             file=req.file,
             lang=req.language,
             selected=req.selected_text,
-            # related_snips=req.related_snippets
+            related_snips=related_snippets if related_snippets else None
         )
 
         # 3) return streaming response
@@ -135,7 +168,18 @@ def clone_repository(req: CloneReq):
         if result.returncode != 0:
             raise Exception(f"Git clone failed: {result.stderr}")
         
-        ingest_repo(str(repo_path))
+        print(f"Repository cloned to {repo_path}")
+        # Extract owner and repo from the request for proper collection naming
+        success = ingest_repo(
+            repo_path=str(repo_path),
+            repo_name=f"{req.owner}/{req.repo}",
+            pr_number=1,  # Default PR number for initial clone
+            commit="main"  # Default commit
+        )
+        
+        if not success:
+            raise Exception("Failed to ingest repository into vector database")
+        print(f"Repository ingested successfully")
         
         return CloneResp(
             success=True,

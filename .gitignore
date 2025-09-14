@@ -9,6 +9,8 @@ node_modules
 # python
 __pycache__/
 .venv/
+venv/
+server/venv/
 .pytest_cache/
 
 # build outputs

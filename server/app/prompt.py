@@ -14,12 +14,22 @@ def build_user_prompt(repo:str, file:str, lang:str|None, selected:str, related_s
     if related_snippets:
         logger.info(f"Building context with {len(related_snippets)} related snippets")
         for i, snippet in enumerate(related_snippets[:6], start=1):
-            similarity_score = snippet.get('similarity_score', 0)
-            content = truncate(snippet.get('content', ''), MAX_CONTEXT_CHARS)
+            # Handle both document-based and snippet-based formats
+            if 'documents' in snippet and snippet['documents']:
+                code_content = snippet['documents'][0]
+                metadata = snippet.get('metadatas', [{}])[0] if snippet.get('metadatas') else {}
+                file_path = metadata.get('relative_path', 'unknown')
+                similarity_score = snippet.get('similarity_score', 0)
+            else:
+                code_content = snippet.get('code', snippet.get('content', ''))
+                file_path = snippet.get('file', snippet.get('relative_path', 'unknown'))
+                similarity_score = snippet.get('similarity_score', 0)
+            
+            content = truncate(code_content, MAX_CONTEXT_CHARS)
             logger.info(f"Adding context snippet {i}: similarity {similarity_score:.3f}, length {len(content)} chars")
             
             ctx_blocks.append(
-                f"<<CONTEXT_SNIPPET {i} (similarity: {similarity_score:.3f})>>\n"
+                f"<<CONTEXT_SNIPPET {i} {file_path} (similarity: {similarity_score:.3f})>>\n"
                 f"{content}\n"
                 f"<<END_CONTEXT_SNIPPET>>"
             )
@@ -62,24 +72,34 @@ def truncate(s: str, limit: int) -> str:
     return s if len(s) <= limit else s[:limit] + "\n…[truncated]"
 
 
-def build_messages(repo, file, lang, selected, related_snips=None ):
+def build_messages(repo, file, lang, selected, related_snips=None):
     import logging
     logger = logging.getLogger(__name__)
     
     selected = truncate(selected, MAX_SELECTED_CHARS)
     logger.info(f"Building messages for {repo}/{file}, selected text: {len(selected)} chars")
     
-    # Process related snippets if provided
+    # Process and truncate related snippets
     processed_snippets = []
     if related_snips:
         logger.info(f"Processing {len(related_snips)} related snippets")
-        processed_snippets = [
-            {
-                **snippet,
-                "content": truncate(snippet.get("content", ""), MAX_CONTEXT_CHARS)
-            }
-            for snippet in related_snips
-        ]
+        for s in related_snips[:6]:  # Limit to 6 snippets
+            if 'documents' in s and s['documents']:
+                # ChromaDB format
+                truncated_content = truncate(s['documents'][0], MAX_CONTEXT_CHARS)
+                processed_snippets.append({
+                    'documents': [truncated_content],
+                    'metadatas': s.get('metadatas', [{}]),
+                    'similarity_score': s.get('similarity_score', 0)
+                })
+            else:
+                # Legacy format
+                truncated_code = truncate(s.get('code', s.get('content', '')), MAX_CONTEXT_CHARS)
+                processed_snippets.append({
+                    **s, 
+                    "content": truncated_code,
+                    'similarity_score': s.get('similarity_score', 0)
+                })
     
     user = build_user_prompt(
         repo=f"{repo}",

@@ -47,8 +47,8 @@ def should_process_file(file_path: str) -> bool:
     
     return True
 
-def load_code_files(root_dir: str, repo_key: str):
-    """Load code files with progress tracking"""
+def load_code_files(root_dir: str, repo_key: str = None):
+    """Load code files with progress tracking and metadata"""
     docs = []
     processed_files = 0
     skipped_files = 0
@@ -66,13 +66,14 @@ def load_code_files(root_dir: str, repo_key: str):
     
     logger.info(f"Found {total_files} files to process")
     
-    # Update status
-    ingestion_status[repo_key].update({
-        'stage': 'loading_files',
-        'total_files': total_files,
-        'processed_files': 0,
-        'progress_percent': 0
-    })
+    # Update status if repo_key provided
+    if repo_key and repo_key in ingestion_status:
+        ingestion_status[repo_key].update({
+            'stage': 'loading_files',
+            'total_files': total_files,
+            'processed_files': 0,
+            'progress_percent': 0
+        })
     
     for root, _, files in os.walk(root_dir):
         for file in files:
@@ -85,19 +86,26 @@ def load_code_files(root_dir: str, repo_key: str):
             try:
                 loader = TextLoader(file_path, encoding="utf-8")
                 file_docs = loader.load()
+                
+                # Add relative path metadata
+                for doc in file_docs:
+                    doc.metadata['relative_path'] = str(Path(file_path).relative_to(root_dir))
+                    doc.metadata['file_type'] = Path(file_path).suffix
+                
                 docs.extend(file_docs)
                 processed_files += 1
                 
-                # Update progress
-                progress = int((processed_files / total_files) * 100)
-                ingestion_status[repo_key].update({
-                    'processed_files': processed_files,
-                    'progress_percent': progress,
-                    'current_file': file_path
-                })
+                # Update progress if repo_key provided
+                if repo_key and repo_key in ingestion_status:
+                    progress = int((processed_files / total_files) * 100)
+                    ingestion_status[repo_key].update({
+                        'processed_files': processed_files,
+                        'progress_percent': progress,
+                        'current_file': file_path
+                    })
                 
                 if processed_files % 10 == 0:  # Log every 10 files
-                    logger.info(f"Processed {processed_files}/{total_files} files ({progress}%)")
+                    logger.info(f"Processed {processed_files}/{total_files} files ({progress if repo_key else 0}%)")
                     
             except Exception as e:
                 error_files += 1
@@ -140,13 +148,12 @@ def ingest_repo(repo_path: str, owner: str, repo: str) -> Dict:
         
         logger.info("Starting document chunking...")
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=100
+            chunk_size=1500,  # Larger chunks for better code context
+            chunk_overlap=200,  # More overlap to preserve context
+            separators=["\n\n", "\n", " ", ""]  # Code-friendly separators
         )
         
         documents = splitter.split_documents(raw_documents)
-        documents = [doc.page_content for doc in documents]
-        
         logger.info(f"Created {len(documents)} chunks")
         
         # Stage 3: Connect to ChromaDB
@@ -159,9 +166,11 @@ def ingest_repo(repo_path: str, owner: str, repo: str) -> Dict:
         client = None
         try:
             # Try HTTP client first
-            client = chromadb.HttpClient(host='localhost', port=8000)
+            chroma_host = os.getenv('CHROMA_HOST', 'localhost:8000')
+            host, port = chroma_host.split(':')
+            client = chromadb.HttpClient(host=host, port=int(port))
             client.heartbeat()
-            logger.info("Successfully connected to ChromaDB via HTTP client")
+            logger.info(f"Successfully connected to ChromaDB via HTTP client at {host}:{port}")
         except Exception as http_error:
             logger.warning(f"HTTP client failed: {http_error}, trying persistent client")
             try:
@@ -200,34 +209,69 @@ def ingest_repo(repo_path: str, owner: str, repo: str) -> Dict:
         
         # Process documents in batches
         batch_size = 10
+        successful_adds = 0
+        
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i + batch_size]
+            batch_ids = []
+            batch_embeddings = []
+            batch_documents = []
+            batch_metadatas = []
             
             for j, doc in enumerate(batch):
                 doc_id = i + j
                 try:
-                    response = ollama_client.embed(model="mxbai-embed-large", input=doc)
-                    embeddings = response["embeddings"]
+                    response = ollama_client.embed(model="mxbai-embed-large", input=doc.page_content)
                     
+                    # Handle different response formats
+                    if "embeddings" in response:
+                        embedding = response["embeddings"]
+                        if isinstance(embedding, list) and len(embedding) > 0:
+                            # If embeddings is a list of embeddings, take the first one
+                            embedding = embedding[0] if isinstance(embedding[0], list) else embedding
+                    elif "embedding" in response:
+                        embedding = response["embedding"]
+                    else:
+                        logger.error(f"Unexpected embedding response format: {response.keys()}")
+                        continue
+                    
+                    batch_ids.append(str(doc_id))
+                    batch_embeddings.append(embedding)
+                    batch_documents.append(doc.page_content)
+                    
+                    # Prepare metadata
+                    metadata = dict(doc.metadata)
+                    metadata['chunk_index'] = doc_id
+                    metadata['repo_path'] = repo_path
+                    batch_metadatas.append(metadata)
+                    
+                except Exception as e:
+                    logger.error(f"Error embedding chunk {doc_id}: {e}")
+                    continue
+            
+            # Add batch to collection
+            if batch_ids:
+                try:
                     collection.add(
-                        ids=[str(doc_id)],
-                        embeddings=embeddings,
-                        documents=[doc]
+                        ids=batch_ids,
+                        embeddings=batch_embeddings,
+                        documents=batch_documents,
+                        metadatas=batch_metadatas
                     )
+                    successful_adds += len(batch_ids)
                     
                     # Update progress
-                    processed = doc_id + 1
-                    progress = 50 + int((processed / len(documents)) * 45)  # 50-95%
+                    progress = 50 + int((successful_adds / len(documents)) * 45)  # 50-95%
                     ingestion_status[repo_key].update({
-                        'processed_chunks': processed,
+                        'processed_chunks': successful_adds,
                         'progress_percent': progress
                     })
                     
-                    if processed % 50 == 0:
-                        logger.info(f"Embedded {processed}/{len(documents)} chunks ({progress}%)")
+                    if successful_adds % 50 == 0:
+                        logger.info(f"Embedded {successful_adds}/{len(documents)} chunks ({progress}%)")
                         
                 except Exception as e:
-                    logger.error(f"Error embedding chunk {doc_id}: {e}")
+                    logger.error(f"Error adding batch to ChromaDB: {e}")
                     continue
         
         # Stage 5: Complete
@@ -242,17 +286,19 @@ def ingest_repo(repo_path: str, owner: str, repo: str) -> Dict:
             'duration': duration,
             'collection_name': collection_name,
             'total_documents': len(raw_documents),
-            'total_chunks': len(documents)
+            'total_chunks': len(documents),
+            'successful_chunks': successful_adds
         })
         
         logger.info(f"Ingestion completed for {repo_key} in {duration:.2f} seconds")
-        logger.info(f"Collection: {collection_name}, Documents: {len(raw_documents)}, Chunks: {len(documents)}")
+        logger.info(f"Collection: {collection_name}, Documents: {len(raw_documents)}, Chunks: {successful_adds}/{len(documents)}")
         
         return {
             'success': True,
             'collection_name': collection_name,
             'total_documents': len(raw_documents),
             'total_chunks': len(documents),
+            'successful_chunks': successful_adds,
             'duration': duration
         }
         
