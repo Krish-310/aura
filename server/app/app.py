@@ -1,14 +1,16 @@
 import uuid
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from dotenv import load_dotenv
 from app.schemas import IngestReq, HoverReq, HoverResp, SelectReq, SelectResp, CloneReq, CloneResp
 # from app.deps import require_auth, jobs_store
 from app import vectordb as retrieval
-from app import cerebras_client as cb
 from app import prompt
+from fastapi.responses import StreamingResponse
+from app import stream
+import json
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file (project root)
+load_dotenv(dotenv_path="../.env")
 
 app = FastAPI()
 
@@ -25,10 +27,9 @@ def status(repo: str, prNumber: int, commit: str):
         return {"status": "indexing"}
 
 
-@app.post("/select", response_model=SelectResp)
-def select_code(req: SelectReq):
+@app.post("/select")
+async def select_code(req: SelectReq, request: Request):
     try:
-        
         # we might be able to pass the context in here!
         messages = prompt.build_messages(
             repo=f"{req.owner}/{req.repo}",
@@ -38,26 +39,41 @@ def select_code(req: SelectReq):
             # related_snips=req.related_snippets
         )
 
-        # Call Cerebras inference (streaming)
-        stream = cb.stream_summary(messages, max_tokens=1000, temperature=0.3)
-        
-        # Collect the streaming response
-        explanation_parts = []
-        for chunk in stream:
-            piece = chunk.choices[0].delta.content or ""
-            if piece:
-                explanation_parts.append(piece)
-        
-        explanation = "".join(explanation_parts).strip()
-        
-        # Return the response
-        return SelectResp(
-            explanation=explanation,
-            related_code=None  # Could be enhanced to include related code from ChromaDB
+        # 3) return streaming response
+        async def gen():
+            try:
+                # Stream model responses and wrap in NDJSON
+                async for chunk in stream.stream_model(messages, temperature=0.2, max_tokens=700):
+                    # chunk is already bytes from stream_model
+                    piece = chunk.decode("utf-8", errors="ignore") if isinstance(chunk, bytes) else str(chunk)
+                    line = json.dumps({"delta": piece}) + "\n"
+                    yield line.encode("utf-8")
+
+                    # Cooperative cancellation if client disconnects
+                    if await request.is_disconnected():
+                        break
+
+                # Emit an explicit done sentinel
+                yield (json.dumps({"done": True}) + "\n").encode("utf-8")
+
+            except Exception as e:
+                # Send error as NDJSON so the client can handle it uniformly
+                err_line = json.dumps({"error": str(e)}) + "\n"
+                yield err_line.encode("utf-8")
+
+        # >>> CHANGED: use NDJSON + anti-buffering headers
+        headers = {
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache, no-transform",
+        }
+        return StreamingResponse(
+            gen(),
+            media_type="application/x-ndjson; charset=utf-8",
+            headers=headers,
         )
         
     except Exception as e:
-        # Fallback explanation if Cerebras fails
+        # Fallback explanation if Cerebras stream model fails
         fallback_explanation = f"""**Code Analysis for {req.file}**
 
 **Selected Code:**

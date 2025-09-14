@@ -301,26 +301,31 @@ function createTooltip() {
   return tooltip;
 }
 
-// Show loading state with better UX
+// Show loading state with fixed size
 function showLoading() {
   const tooltip = createTooltip();
   tooltip.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 12px; color: #656d76;">
-      <div style="font-weight: 500;">Analyzing code...</div>
+    <div class="tooltip-content loading">
+      <div class="loading-indicator">
+        <div class="loading-spinner"></div>
+        <div>Analyzing code...</div>
+      </div>
     </div>
   `;
-  tooltip.className = "text-selection-tooltip loading";
+  tooltip.className = "text-selection-tooltip";
   tooltip.style.display = "block";
+  
+  // Position tooltip immediately with fixed size
+  positionTooltip();
   
   // Smooth fade-in animation
   requestAnimationFrame(() => {
     tooltip.classList.add('show');
-    positionTooltip();
   });
 }
 
-// Show explanation with enhanced formatting and animation
-function showExplanation(explanation) {
+// Show explanation with enhanced formatting in fixed container
+function showExplanation(explanation, isStreaming = false) {
   const tooltip = createTooltip();
 
   // Convert markdown-like formatting to HTML
@@ -340,22 +345,31 @@ function showExplanation(explanation) {
     // Convert line breaks
     .replace(/\n/g, "<br>");
 
-  // Remove loading class and add content
-  tooltip.classList.remove('loading');
-  tooltip.innerHTML = htmlContent;
+  // Add streaming cursor if still streaming
+  if (isStreaming) {
+    htmlContent += '<span class="streaming-cursor"></span>';
+  }
+
+  // Update content without changing tooltip size
+  const contentClass = isStreaming ? 'tooltip-content streaming' : 'tooltip-content';
+  tooltip.innerHTML = `<div class="${contentClass}">${htmlContent}</div>`;
   tooltip.className = "text-selection-tooltip show";
   tooltip.style.display = "block";
   
-  // Smooth transition from loading to content
-  requestAnimationFrame(() => {
-    positionTooltip();
-  });
+  // Scroll to bottom to show latest content
+  const contentDiv = tooltip.querySelector('.tooltip-content');
+  if (contentDiv) {
+    contentDiv.scrollTop = contentDiv.scrollHeight;
+  }
 }
 
 // Position tooltip intelligently near selection
 function positionTooltip() {
   if (!tooltip || !currentSelection) return;
 
+  // Check if selection has ranges before accessing
+  if (currentSelection.rangeCount === 0) return;
+  
   const range = currentSelection.getRangeAt(0);
   const rect = range.getBoundingClientRect();
   
@@ -426,10 +440,159 @@ function hideTooltip() {
   isLoading = false;
 }
 
-// Call the server to get code explanation
-async function explainCode(selectedText, repoInfo) {
+// // Call the server to get code explanation
+// async function explainCode(selectedText, repoInfo) {
+//   try {
+//     console.log("Making request to server with:", {
+//       owner: repoInfo.owner,
+//       repo: repoInfo.repo,
+//       sha: repoInfo.sha,
+//       file: repoInfo.file,
+//       selected_text: selectedText,
+//       language: getLanguageFromFile(repoInfo.file),
+//     });
+
+//     try {
+//       const response = await fetch("http://localhost:8787/select", {
+//         method: "POST",
+//         headers: {
+//           "Content-Type": "application/json",
+//         },
+//         body: JSON.stringify({
+//           owner: repoInfo.owner,
+//           repo: repoInfo.repo,
+//           sha: repoInfo.sha,
+//           file: repoInfo.file,
+//           selected_text: selectedText,
+//           language: getLanguageFromFile(repoInfo.file),
+//         }),
+//         signal: currentAbort.signal
+//       })
+
+//       if (!resp.body) {
+//         setText('Failed to stream (no body).')
+//         return
+//       }
+
+//       const reader = resp.body.getReader()
+//       const decoder = new TextDecoder()
+//       let buf = ''
+
+//       // Read chunks and update tooltip
+//       while (true) {
+//         const { value, done } = await reader.read()
+//         if (done) break
+//         buf += decoder.decode(value, { stream: true })
+//         setText(buf) // live update
+//       }
+
+//       // finalize decode (flush)
+//       buf += decoder.decode()
+//       setText(buf || 'No output.')
+    
+//     } catch (err) {
+//       if (err.name === 'AbortError') return;
+//       setText(`Stream error: ${err.message}`);
+//     }
+  
+
+  
+
+// //     console.log("Server response status:", response.status);
+
+// //     if (!response.ok) {
+// //       const errorText = await response.text();
+// //       console.error("Server error response:", errorText);
+// //       throw new Error(`Server error: ${response.status} - ${errorText}`);
+// //     }
+
+// //     const data = await response.json();
+// //     console.log("Server response data:", data);
+// //     return data.explanation;
+//   } catch (error) {
+//     console.error("Error calling explain endpoint:", error);
+
+//     // Provide more specific error messages
+//     if (error.message.includes("Failed to fetch")) {
+//       return `**Connection Error:** Could not connect to the server.
+
+// **Troubleshooting:**
+// 1. Make sure the server is running: \`docker-compose up\`
+// 2. Check if the server is accessible at http://localhost:8787
+// 3. Try opening http://localhost:8787/status?repo=test&prNumber=1&commit=main in your browser
+
+// **Quick Start:**
+// \`\`\`bash
+// cd /path/to/aura
+// docker-compose up
+// \`\`\``;
+//     }
+
+//     return `**Error:** Could not analyze code.
+
+// **Details:** ${error.message}
+
+// **Troubleshooting:**
+// 1. Check if the server is running on http://localhost:8787
+// 2. Try ingesting the repository first using the /ingest endpoint
+// 3. Check the browser console for more details`;
+//   }
+// }
+
+let currentAbort = null;
+
+// Helper function to safely read response text
+async function safeReadText(response) {
   try {
-    console.log("Making request to server with:", {
+    return await response.text();
+  } catch (e) {
+    return `Error reading response: ${e.message}`;
+  }
+}
+
+// Helper function to handle JSON streaming responses
+function handleJSONish(payload, onDelta, onDone, onError) {
+  try {
+    // Only try to parse if payload looks like JSON
+    if (payload.trim().startsWith("{") || payload.trim().startsWith("[")) {
+      const data = JSON.parse(payload);
+      if (data.delta) {
+        onDelta(data.delta);
+      } else if (data.done) {
+        onDone();
+      } else if (data.error) {
+        onError(data.error);
+      } else if (data.explanation) {
+        onDelta(data.explanation);
+        onDone();
+      }
+    } else if (payload.trim()) {
+      // Treat as plain text
+      onDelta(payload);
+    }
+  } catch (e) {
+    if (payload.trim()) {
+      onDelta(payload);
+    }
+  }
+}
+
+export async function explainCode(
+  selectedText,
+  repoInfo,
+  handlers = {}
+) {
+  const { onDelta = () => {}, onDone = () => {}, onError = () => {} } = handlers;
+
+  try {
+    // Abort any prior in-flight stream
+    if (currentAbort) currentAbort.abort();
+    currentAbort = new AbortController();
+
+    const { serverUrl } = await chrome.storage.local.get(["serverUrl"]);
+    const base = serverUrl || "http://localhost:8787";
+
+    const body = JSON.stringify({
       owner: repoInfo.owner,
       repo: repoInfo.repo,
       sha: repoInfo.sha,
@@ -438,61 +601,117 @@ async function explainCode(selectedText, repoInfo) {
       language: getLanguageFromFile(repoInfo.file),
     });
 
-    const response = await fetch("http://localhost:8787/select", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        owner: repoInfo.owner,
-        repo: repoInfo.repo,
-        sha: repoInfo.sha,
-        file: repoInfo.file,
-        selected_text: selectedText,
-        language: getLanguageFromFile(repoInfo.file),
-      }),
+    console.log("[explain] POST", `${base}/select`, {
+      owner: repoInfo.owner,
+      repo: repoInfo.repo,
+      sha: repoInfo.sha,
+      file: repoInfo.file,
     });
 
-    console.log("Server response status:", response.status);
+    const resp = await fetch(`${base}/select`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: currentAbort.signal,
+    });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Server error response:", errorText);
-      throw new Error(`Server error: ${response.status} - ${errorText}`);
+    if (!resp.ok) {
+      const txt = await safeReadText(resp);
+      console.error("[explain] HTTP", resp.status, txt);
+      onError(`Server error ${resp.status}: ${txt || resp.statusText}`);
+      return;
     }
 
-    const data = await response.json();
-    console.log("Server response data:", data);
-    return data.explanation;
-  } catch (error) {
-    console.error("Error calling explain endpoint:", error);
-
-    // Provide more specific error messages
-    if (error.message.includes("Failed to fetch")) {
-      return `**Connection Error:** Could not connect to the server.
-
-**Troubleshooting:**
-1. Make sure the server is running: \`docker-compose up\`
-2. Check if the server is accessible at http://localhost:8787
-3. Try opening http://localhost:8787/status?repo=test&prNumber=1&commit=main in your browser
-
-**Quick Start:**
-\`\`\`bash
-cd /path/to/aura
-docker-compose up
-\`\`\``;
+    if (!resp.body) {
+      console.error("[explain] No response.body (streaming unsupported)");
+      onError("Failed to stream (no response body)");
+      return;
     }
 
-    return `**Error:** Could not analyze code.
+    const ctype = resp.headers.get("content-type") || "";
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
 
-**Details:** ${error.message}
+    // Streaming buffers
+    let buf = "";
+    let sseMode = ctype.includes("text/event-stream");
+    let textMode = ctype.includes("text/plain"); // for your old raw text fallback
 
-**Troubleshooting:**
-1. Check if the server is running on http://localhost:8787
-2. Try ingesting the repository first using the /ingest endpoint
-3. Check the browser console for more details`;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buf += decoder.decode(value, { stream: true });
+
+      // --- Parse loop per protocol ---
+      if (sseMode) {
+        // SSE: split by double newline; parse `data: ...` lines
+        let sepIdx;
+        while ((sepIdx = buf.indexOf("\n\n")) !== -1) {
+          const eventChunk = buf.slice(0, sepIdx);
+          buf = buf.slice(sepIdx + 2);
+          const lines = eventChunk.split("\n");
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            handleJSONish(payload, onDelta, onDone, onError);
+          }
+        }
+      } else if (ctype.includes("application/x-ndjson")) {
+        // NDJSON: split by single newline; parse each line
+        let nlIdx;
+        while ((nlIdx = buf.indexOf("\n")) !== -1) {
+          const line = buf.slice(0, nlIdx).trim();
+          buf = buf.slice(nlIdx + 1);
+          if (!line) continue;
+          handleJSONish(line, onDelta, onDone, onError);
+        }
+      } else if (textMode || !ctype) {
+        // Plain text (or unknown): stream as-is
+        onDelta(buf);
+        buf = "";
+      }
+    }
+
+    // Flush trailing data
+    const tail = decoder.decode();
+    if (tail) buf += tail;
+
+    if (sseMode || ctype.includes("application/x-ndjson")) {
+      // NDJSON/SSE: there may be a small tail (empty or whitespace)
+      if (buf.trim()) {
+        // Try parse once; if not JSON, ignore
+        handleJSONish(buf.trim(), onDelta, onDone, onError);
+      }
+      onDone();
+      return;
+    }
+
+    // Plain text fallback (compat with your old "[stream-error]" pattern)
+    if (buf.includes("[stream-error]")) {
+      const msg = buf.split("[stream-error]").pop()?.trim() || "Unknown error";
+      console.error("[explain] stream-error:", msg);
+      onError(`Stream error from server: ${msg}`);
+      return;
+    }
+
+    // If we streamed raw text progressively, we're done
+    if (buf) onDelta(buf);
+    onDone();
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      console.log("[explain] aborted");
+      return;
+    }
+    console.error("[explain] exception:", err);
+    onError(err);
+  } finally {
+    currentAbort = null;
   }
 }
+
+
 
 // Get language from file extension
 function getLanguageFromFile(filename) {
@@ -567,15 +786,40 @@ async function handleSelection() {
     showLoading();
 
     try {
-      const explanation = await explainCode(selectedText, repoInfo);
-      if (currentSelection === selection) { // Only show if selection hasn't changed
-        showExplanation(explanation);
-      }
+      let explanationText = "";
+      let isFirstDelta = true;
+      
+      await explainCode(selectedText, repoInfo, {
+        onDelta: (delta) => {
+          if (currentSelection === selection) {
+            explanationText += delta;
+            // Show explanation with streaming indicator
+            showExplanation(explanationText, true);
+          }
+        },
+        onDone: () => {
+          console.log("Explanation complete:", explanationText);
+          if (currentSelection === selection) {
+            // Remove streaming cursor when done
+            showExplanation(explanationText, false);
+          }
+        },
+        onError: (error) => {
+          console.error("Error getting explanation:", error);
+          if (currentSelection === selection) {
+            showExplanation(
+              "**Error:** Could not analyze code. Please check the console for details.",
+              false
+            );
+          }
+        }
+      });
     } catch (error) {
       console.error("Error getting explanation:", error);
       if (currentSelection === selection) {
         showExplanation(
-          "**Error:** Could not analyze code. Please check the console for details."
+          "**Error:** Could not analyze code. Please check the console for details.",
+          false
         );
       }
     } finally {

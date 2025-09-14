@@ -12,14 +12,14 @@
   color: #24292f;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 2147483647;
-  max-width: 480px;
-  max-height: 70vh;
+  width: 480px;
+  height: 300px;
   word-wrap: break-word;
   white-space: pre-wrap;
   display: none;
   pointer-events: auto;
   opacity: 0;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   transform: translateY(-8px) scale(0.95);
   overflow-y: auto;
   overflow-x: hidden;
@@ -192,6 +192,19 @@
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
   }
   
+  .loading-spinner {
+    border-color: #373e47;
+    border-top-color: #58a6ff;
+  }
+  
+  .streaming-cursor {
+    background-color: #58a6ff;
+  }
+  
+  .tooltip-content.loading {
+    color: #8b949e;
+  }
+  
   .text-selection-tooltip.tooltip-above::before {
     border-top-color: #1c2128;
   }
@@ -200,10 +213,6 @@
     border-bottom-color: #1c2128;
   }
   
-  .text-selection-tooltip.loading::after {
-    border-color: #373e47;
-    border-top-color: #58a6ff;
-  }
   
   .text-selection-tooltip code {
     background-color: #161b22;
@@ -247,6 +256,59 @@
   }
 }
 
+/* Streaming content container */
+.tooltip-content {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.tooltip-content.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: #656d76;
+}
+
+.tooltip-content.streaming {
+  padding-bottom: 20px;
+}
+
+/* Loading indicator for fixed tooltip */
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e1e5e9;
+  border-top: 2px solid #0969da;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Streaming cursor effect */
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background-color: #0969da;
+  margin-left: 2px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
 /* Ensure tooltip doesn't interfere with page content */
 .text-selection-tooltip * {
   margin: 0;
@@ -255,4 +317,10 @@
   font-size: 100%;
   font: inherit;
   vertical-align: baseline;
+}
+
+/* Override for content container */
+.tooltip-content * {
+  margin: revert;
+  padding: revert;
 }

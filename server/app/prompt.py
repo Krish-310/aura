@@ -41,7 +41,7 @@ Answer casually, proving a good explaination, which should include the following
 4. Potential issues or considerations
 5. How it fits into the broader codebase context
 
-Keep the explanation clear and concise, suitable for a code review. Keep your response to 300 tokens or less.
+Keep the explanation clear and concise, suitable for a code review. Keep your response to 300 characters or less.
 """
 
 MAX_SELECTED_CHARS = 8000    # ~2–3k tokens

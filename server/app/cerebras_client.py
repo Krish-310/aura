@@ -1,5 +1,9 @@
 import os
 from cerebras.cloud.sdk import Cerebras
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (project root)
+load_dotenv(dotenv_path="../.env")
 
 # CEREBRAS_MODEL = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
 
@@ -26,6 +30,7 @@ def stream_summary(messages, max_tokens=800, temperature=0.2, top_p=0.95):
             top_p=top_p,
         )
     except Exception as e:
+        model = os.environ.get("CEREBRAS_MODEL", "qwen-3-235b-a22b-instruct-2507")
         print(f"Cerebras API Error: {e}")
         print(f"Model: {model}")
         print(f"API Key present: {bool(os.environ.get('CEREBRAS_API_KEY'))}")
