@@ -21,14 +21,4 @@ export default defineConfig({
       },
     },
   },
-  plugins: [
-    {
-      name: "copy-content-css",
-      generateBundle() {
-        const src = resolve(__dirname, "src/content.css");
-        const dest = resolve(__dirname, "dist/content.css");
-        copyFileSync(src, dest);
-      },
-    },
-  ],
 });
