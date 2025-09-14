@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Text Selection Tooltip",
+  "name": "GitHub Code Explainer",
   "version": "0.1.0",
-  "description": "Shows selected text in a tooltip above the selection.",
+  "description": "Explains selected code using repository context from ChromaDB.",
   "permissions": ["activeTab"],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://github.com/*"],
       "js": ["dist/content.js"],
       "run_at": "document_idle"
     }

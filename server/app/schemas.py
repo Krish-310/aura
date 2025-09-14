@@ -19,3 +19,16 @@ class HoverResp(BaseModel):
     summary: List[str]
     highlights: List[Dict[str, Any]] = []
     actions: List[Dict[str, Any]] = []
+
+class SelectReq(BaseModel):
+    owner: str
+    repo: str
+    sha: str
+    file: str
+    selected_text: str
+    language: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+
+class SelectResp(BaseModel):
+    explanation: str
+    related_code: Optional[List[Dict[str, Any]]] = None

@@ -16,3 +16,16 @@ class SummarizeRequest(BaseModel):
 class SummarizeResponse(BaseModel):
     summary: str
     cached: bool = False
+
+class SelectRequest(BaseModel):
+    owner: str
+    repo: str
+    sha: str
+    file: str
+    selected_text: str
+    language: str | None = None
+    context: dict | None = None  # Additional context like line numbers, surrounding code
+
+class SelectResponse(BaseModel):
+    explanation: str
+    related_code: list[dict] | None = None
