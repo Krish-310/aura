@@ -5,9 +5,22 @@ from .models import SummarizeRequest, SummarizeResponse
 from .github import fetch_file
 from .utils import slice_lines
 from .summarizer import summarize_code
+from .ingest import ingest_repo, top_k_related
 from .cache import key_for, get as cache_get, set as cache_set
 
 app = FastAPI(title="github-hover-ai")
+from pydantic import BaseModel
+
+class IngestRequest(BaseModel):
+    owner: str
+    repo: str
+    sha: str
+
+@app.post("/ingest")
+async def ingest(req: IngestRequest):
+    result = await ingest_repo(req.owner, req.repo, req.sha)
+    return result
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
