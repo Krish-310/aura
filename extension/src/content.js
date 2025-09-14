@@ -5,29 +5,28 @@
 const css = `
 .text-selection-tooltip {
   position: absolute;
-  background-color: #ffffff;
-  border: 1px solid #d1d9e0;
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(209, 217, 224, 0.6);
+  border-radius: 16px;
   padding: 16px 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 13px;
   line-height: 1.5;
   color: #24292f;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   z-index: 2147483647;
-  max-width: 480px;
-  max-height: 70vh;
+  width: 480px;
+  min-height: 80px;
   word-wrap: break-word;
   white-space: pre-wrap;
   display: none;
   pointer-events: auto;
   opacity: 0;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   transform: translateY(-8px) scale(0.95);
-  overflow-y: auto;
-  overflow-x: hidden;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
 .text-selection-tooltip.show {
@@ -43,10 +42,10 @@ const css = `
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 8px solid #ffffff;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 10px solid rgba(255, 255, 255, 0.85);
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.08));
 }
 
 .text-selection-tooltip.tooltip-below::before {
@@ -57,14 +56,14 @@ const css = `
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 8px solid #ffffff;
-  filter: drop-shadow(0 -2px 4px rgba(0, 0, 0, 0.1));
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 10px solid rgba(255, 255, 255, 0.85);
+  filter: drop-shadow(0 -2px 8px rgba(0, 0, 0, 0.08));
 }
 
 .text-selection-tooltip.loading {
-  opacity: 0.9;
+  opacity: 0.85;
 }
 
 .text-selection-tooltip.loading::after {
@@ -85,43 +84,29 @@ const css = `
   100% { transform: rotate(360deg); }
 }
 
-.text-selection-tooltip::-webkit-scrollbar {
-  width: 6px;
-}
-
-.text-selection-tooltip::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-.text-selection-tooltip::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
-
-.text-selection-tooltip::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
 
 /* Code block styling */
 .text-selection-tooltip code {
-  background-color: #f6f8fa;
-  border-radius: 3px;
-  padding: 2px 4px;
+  background: rgba(246, 248, 250, 0.8);
+  border: 1px solid rgba(225, 228, 232, 0.5);
+  border-radius: 4px;
+  padding: 2px 6px;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 11px;
+  backdrop-filter: blur(4px);
 }
 
 .text-selection-tooltip pre {
-  background-color: #f6f8fa;
-  border: 1px solid #e1e4e8;
-  border-radius: 6px;
-  padding: 12px;
-  margin: 8px 0;
-  overflow-x: auto;
+  background: rgba(246, 248, 250, 0.7);
+  border: 1px solid rgba(225, 228, 232, 0.4);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+  overflow: hidden;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.5;
+  backdrop-filter: blur(8px);
 }
 
 .text-selection-tooltip pre code {
@@ -186,35 +171,113 @@ const css = `
   margin: 16px 0;
 }
 
+/* Streaming content container */
+.tooltip-content {
+  min-height: 48px;
+  overflow: hidden;
+  transition: height 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tooltip-content.scrollable {
+  overflow: visible;
+}
+
+.tooltip-content.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 8px;
+  color: #656d76;
+  height: 100%;
+  min-height: 48px;
+  padding: 0;
+  box-sizing: border-box;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.tooltip-content.streaming {
+  padding-bottom: 20px;
+}
+
+/* Loading indicator for fixed tooltip */
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e1e5e9;
+  border-top: 2px solid #0969da;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Streaming cursor effect */
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background-color: #0969da;
+  margin-left: 2px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
 @media (prefers-color-scheme: dark) {
   .text-selection-tooltip {
-    background-color: #1c2128;
-    border-color: #373e47;
+    background: rgba(28, 33, 40, 0.85);
+    border-color: rgba(55, 62, 71, 0.6);
     color: #f0f6fc;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 8px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
   
-  .text-selection-tooltip.tooltip-above::before {
-    border-top-color: #1c2128;
-  }
-  
-  .text-selection-tooltip.tooltip-below::before {
-    border-bottom-color: #1c2128;
-  }
-  
-  .text-selection-tooltip.loading::after {
-    border-color: #373e47;
+  .loading-spinner {
+    border-color: rgba(55, 62, 71, 0.8);
     border-top-color: #58a6ff;
   }
   
+  .streaming-cursor {
+    background-color: #58a6ff;
+  }
+  
+  .tooltip-content.loading {
+    color: #8b949e;
+  }
+  
+  .text-selection-tooltip.tooltip-above::before {
+    border-top-color: rgba(28, 33, 40, 0.85);
+  }
+  
+  .text-selection-tooltip.tooltip-below::before {
+    border-bottom-color: rgba(28, 33, 40, 0.85);
+  }
+  
   .text-selection-tooltip code {
-    background-color: #161b22;
+    background: rgba(22, 27, 34, 0.8);
+    border-color: rgba(48, 54, 61, 0.5);
     color: #f0f6fc;
   }
   
   .text-selection-tooltip pre {
-    background-color: #161b22;
-    border-color: #30363d;
+    background: rgba(22, 27, 34, 0.7);
+    border-color: rgba(48, 54, 61, 0.4);
     color: #f0f6fc;
   }
   
@@ -225,7 +288,7 @@ const css = `
   }
   
   .text-selection-tooltip h1 {
-    border-bottom-color: #30363d;
+    border-bottom-color: rgba(48, 54, 61, 0.6);
   }
   
   .text-selection-tooltip strong {
@@ -233,19 +296,7 @@ const css = `
   }
   
   .text-selection-tooltip hr {
-    border-top-color: #30363d;
-  }
-  
-  .text-selection-tooltip::-webkit-scrollbar-track {
-    background: #30363d;
-  }
-  
-  .text-selection-tooltip::-webkit-scrollbar-thumb {
-    background: #586069;
-  }
-  
-  .text-selection-tooltip::-webkit-scrollbar-thumb:hover {
-    background: #6a737d;
+    border-top-color: rgba(48, 54, 61, 0.6);
   }
 }
 `;
@@ -301,7 +352,7 @@ function createTooltip() {
   return tooltip;
 }
 
-// Show loading state with fixed size
+// Show loading state with small initial size
 function showLoading() {
   const tooltip = createTooltip();
   tooltip.innerHTML = `
@@ -314,8 +365,9 @@ function showLoading() {
   `;
   tooltip.className = "text-selection-tooltip";
   tooltip.style.display = "block";
+  tooltip.style.height = "80px"; // Start with minimum height
   
-  // Position tooltip immediately with fixed size
+  // Position tooltip ONCE - it will stay in this exact position
   positionTooltip();
   
   // Smooth fade-in animation
@@ -324,7 +376,7 @@ function showLoading() {
   });
 }
 
-// Show explanation with enhanced formatting in fixed container
+// Show explanation with dynamic height expansion
 function showExplanation(explanation, isStreaming = false) {
   const tooltip = createTooltip();
 
@@ -350,20 +402,18 @@ function showExplanation(explanation, isStreaming = false) {
     htmlContent += '<span class="streaming-cursor"></span>';
   }
 
-  // Update content without changing tooltip size
+  // Create content container - ensure it's contained within tooltip
   const contentClass = isStreaming ? 'tooltip-content streaming' : 'tooltip-content';
   tooltip.innerHTML = `<div class="${contentClass}">${htmlContent}</div>`;
   tooltip.className = "text-selection-tooltip show";
   tooltip.style.display = "block";
+  tooltip.style.overflow = "hidden"; // Force containment
   
-  // Scroll to bottom to show latest content
-  const contentDiv = tooltip.querySelector('.tooltip-content');
-  if (contentDiv) {
-    contentDiv.scrollTop = contentDiv.scrollHeight;
-  }
+  // Calculate required height and adjust tooltip dynamically
+  adjustTooltipHeight(tooltip, isStreaming);
 }
 
-// Position tooltip intelligently near selection
+// Position tooltip intelligently near selection - ONLY called once at creation
 function positionTooltip() {
   if (!tooltip || !currentSelection) return;
 
@@ -373,54 +423,41 @@ function positionTooltip() {
   const range = currentSelection.getRangeAt(0);
   const rect = range.getBoundingClientRect();
   
-  // Wait for tooltip to be rendered to get accurate dimensions
-  requestAnimationFrame(() => {
-    const tooltipRect = tooltip.getBoundingClientRect();
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    // Calculate preferred position (above selection, centered)
-    let preferredLeft = rect.left + scrollLeft + (rect.width / 2) - (tooltipRect.width / 2);
-    let preferredTop = rect.top + scrollTop - tooltipRect.height - 16;
-    
-    // Adjust horizontal position to stay within viewport
-    let finalLeft = Math.max(12, Math.min(preferredLeft, viewportWidth - tooltipRect.width - 12));
-    
-    // Determine if we should show above or below selection
-    let finalTop = preferredTop;
-    let showBelow = false;
-    
-    // If tooltip would be cut off at the top, show it below
-    if (preferredTop < scrollTop + 12) {
-      finalTop = rect.bottom + scrollTop + 16;
-      showBelow = true;
-    }
-    
-    // If showing below would cut off at bottom, try to fit above with adjustment
-    if (showBelow && (finalTop + tooltipRect.height > scrollTop + viewportHeight - 12)) {
-      // Try to fit above by reducing the gap
-      const aboveTop = rect.top + scrollTop - tooltipRect.height - 8;
-      if (aboveTop >= scrollTop + 12) {
-        finalTop = aboveTop;
-        showBelow = false;
-      } else {
-        // Keep it below but adjust to fit
-        finalTop = Math.max(scrollTop + 12, scrollTop + viewportHeight - tooltipRect.height - 12);
-      }
-    }
-    
-    // Apply smooth positioning with transform for better performance
-    tooltip.style.position = 'absolute';
-    tooltip.style.left = finalLeft + 'px';
-    tooltip.style.top = finalTop + 'px';
-    tooltip.style.transform = 'translateZ(0)'; // Force hardware acceleration
-    
-    // Add visual indicator of tooltip direction
-    tooltip.classList.toggle('tooltip-below', showBelow);
-    tooltip.classList.toggle('tooltip-above', !showBelow);
-  });
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  
+  // Use fixed dimensions for positioning calculation (480px width, start with 80px height)
+  const tooltipWidth = 480;
+  const initialHeight = 80;
+  
+  // Calculate preferred position (above selection, centered)
+  let preferredLeft = rect.left + scrollLeft + (rect.width / 2) - (tooltipWidth / 2);
+  let preferredTop = rect.top + scrollTop - initialHeight - 16;
+  
+  // Adjust horizontal position to stay within viewport
+  let finalLeft = Math.max(12, Math.min(preferredLeft, viewportWidth - tooltipWidth - 12));
+  
+  // Determine if we should show above or below selection
+  let finalTop = preferredTop;
+  let showBelow = false;
+  
+  // If tooltip would be cut off at the top, show it below
+  if (preferredTop < scrollTop + 12) {
+    finalTop = rect.bottom + scrollTop + 16;
+    showBelow = true;
+  }
+  
+  // Apply positioning - this will be the FINAL position, no more changes
+  tooltip.style.position = 'absolute';
+  tooltip.style.left = finalLeft + 'px';
+  tooltip.style.top = finalTop + 'px';
+  tooltip.style.transform = 'translateZ(0)'; // Force hardware acceleration
+  
+  // Add visual indicator of tooltip direction
+  tooltip.classList.toggle('tooltip-below', showBelow);
+  tooltip.classList.toggle('tooltip-above', !showBelow);
 }
 
 // Hide the tooltip with smooth animation
@@ -540,6 +577,41 @@ function hideTooltip() {
 // }
 
 let currentAbort = null;
+
+// Adjust tooltip height based on content - always expand to fit all content
+function adjustTooltipHeight(tooltip, isStreaming) {
+  const contentDiv = tooltip.querySelector('.tooltip-content');
+  if (!contentDiv) return;
+  
+  // Create a temporary element to measure content height
+  const tempDiv = document.createElement('div');
+  tempDiv.style.position = 'absolute';
+  tempDiv.style.visibility = 'hidden';
+  tempDiv.style.width = '448px'; // Account for padding (480 - 32)
+  tempDiv.style.fontSize = '13px';
+  tempDiv.style.lineHeight = '1.5';
+  tempDiv.style.fontFamily = contentDiv.style.fontFamily || 'inherit';
+  tempDiv.innerHTML = contentDiv.innerHTML;
+  document.body.appendChild(tempDiv);
+  
+  const contentHeight = tempDiv.scrollHeight;
+  document.body.removeChild(tempDiv);
+  
+  // Calculate required tooltip height (content + padding + extra margin)
+  const requiredHeight = contentHeight + 50; // Extra margin to ensure no scrollbars
+  const minHeight = 80;
+  
+  // Always expand to fit content, no maximum limit
+  const targetHeight = Math.max(requiredHeight, minHeight);
+  
+  // Apply height with smooth transition - NO repositioning to prevent jumping
+  tooltip.style.height = targetHeight + 'px';
+  
+  // Remove scrollable class since we always expand
+  contentDiv.classList.remove('scrollable');
+  
+  // DO NOT reposition - this causes jumping!
+}
 
 // Helper function to safely read response text
 async function safeReadText(response) {
@@ -787,19 +859,34 @@ async function handleSelection() {
 
     try {
       let explanationText = "";
-      let isFirstDelta = true;
+      let deltaBuffer = "";
+      let lastUpdateTime = 0;
+      const updateInterval = 50; // ms - throttle updates to prevent text overflow
       
       await explainCode(selectedText, repoInfo, {
         onDelta: (delta) => {
           if (currentSelection === selection) {
-            explanationText += delta;
-            // Show explanation with streaming indicator
-            showExplanation(explanationText, true);
+            deltaBuffer += delta;
+            const now = Date.now();
+            
+            // Throttle updates to allow box to expand smoothly
+            if (now - lastUpdateTime >= updateInterval) {
+              explanationText += deltaBuffer;
+              deltaBuffer = "";
+              lastUpdateTime = now;
+              
+              // Show explanation with streaming indicator and dynamic height
+              showExplanation(explanationText, true);
+            }
           }
         },
         onDone: () => {
           console.log("Explanation complete:", explanationText);
           if (currentSelection === selection) {
+            // Add any remaining buffered text
+            if (deltaBuffer) {
+              explanationText += deltaBuffer;
+            }
             // Remove streaming cursor when done
             showExplanation(explanationText, false);
           }
