@@ -1,62 +1,51 @@
-import asyncio
-from typing import Dict, List
-from .github import list_tree, fetch_file
-from .utils import should_index, naive_chunk_file
-from .summarizer import embed_texts
-from .vectordb import get_or_create_collection, collection_name
+import os
+from langchain_community.document_loaders import TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import ollama
+import chromadb
 
-class _OpenAIEmbedFn:
-    """Minimal adapter so Chroma can call our embed endpoint when needed (we pre-embed anyway)."""
-    def __call__(self, texts: List[str]) -> List[List[float]]:
-        import anyio
-        return anyio.run(embed_texts, texts)  # type: ignore
+def load_code_files(root_dir):
+    docs = []
+    for root, _, files in os.walk(root_dir):
+        for file in files:
+            path = os.path.join(root, file)
+            loader = TextLoader(path, encoding="utf-8")
+            try:
+                docs.extend(loader.load())
+            except Exception as e:
+                print(f"Error loading {path}: {e}")
+    return docs
 
-async def ingest_repo(owner: str, repo: str, sha: str) -> Dict:
-    tree = await list_tree(owner, repo, sha)
-    candidate_files = [t for t in tree if should_index(t.get("path", ""), t.get("size", 0))]
-    chunks: List[Dict] = []
-    # Fetch + chunk concurrently (limit concurrency to be polite)
-    sem = asyncio.Semaphore(8)
-    async def _fetch_and_chunk(path: str):
-        async with sem:
-            code = await fetch_file(owner, repo, sha, path)
-            for ch in naive_chunk_file(path, code):
-                chunks.append({"path": path, **ch})
-    await asyncio.gather(*[_fetch_and_chunk(f["path"]) for f in candidate_files])
+# Load the entire repo
+def ingest_repo(repo_path):
+    raw_documents = load_code_files(f"{repo_path}")
 
-    # Prepare embeddings
-    texts = [c["code"] for c in chunks]
-    embs = await embed_texts(texts)
+    # Chunk the code
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,  # tune for your use case
+        chunk_overlap=100
+    )
 
-    # Upsert into Chroma
-    from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
-    coll = get_or_create_collection(collection_name(owner, repo, sha), embed_fn=DefaultEmbeddingFunction())
+    documents = splitter.split_documents(raw_documents)
+    documents = [doc.page_content for doc in documents]
+    
+    # Connect to ChromaDB
+    chroma_host = os.getenv('CHROMA_HOST', 'localhost:8000')
+    host, port = chroma_host.split(':')
+    client = chromadb.HttpClient(host=host, port=int(port))
 
-    ids = [f"{owner}/{repo}:{sha}:{c['path']}:{c['start']}-{c['end']}:{i}" for i,c in enumerate(chunks)]
-    metadatas = [{
-        "repo": f"{owner}/{repo}",
-        "sha": sha,
-        "file": c["path"],
-        "start": c["start"],
-        "end": c["end"],
-        "lang": c["lang"],
-    } for c in chunks]
-    coll.add(ids=ids, embeddings=embs, metadatas=metadatas, documents=texts)
-    return {"files": len(candidate_files), "chunks": len(chunks)}
+    collection = client.create_collection(name=f"{repo_path}")
 
-async def top_k_related(owner: str, repo: str, sha: str, query_text: str, k: int = 6) -> List[Dict]:
-    from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
-    coll = get_or_create_collection(collection_name(owner, repo, sha), embed_fn=DefaultEmbeddingFunction())
-    if coll.count() == 0:
-        return []
-    # embed query
-    q_emb = (await embed_texts([query_text]))[0]
-    res = coll.query(query_embeddings=[q_emb], n_results=k)
-    out = []
-    for i in range(len(res["ids"][0])):
-        out.append({
-            "id": res["ids"][0][i],
-            "code": res["documents"][0][i],
-            **res["metadatas"][0][i],
-        })
-    return out
+    # Configure Ollama client to use Docker service
+    ollama_host = os.getenv('OLLAMA_HOST', 'localhost:11434')
+    ollama_client = ollama.Client(host=f'http://{ollama_host}')
+
+    # store each document in a vector embedding database
+    for i, d in enumerate(documents):
+        response = ollama_client.embed(model="mxbai-embed-large", input=d)
+        embeddings = response["embeddings"]
+        collection.add(
+            ids=[str(i)],
+            embeddings=embeddings,
+            documents=[d]
+        )

@@ -1,16 +1,54 @@
 version: "3.8"
 
 services:
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   server:
     build: ./server
     ports:
       - "8787:8787"
     environment:
       - PYTHONUNBUFFERED=1
+      - OLLAMA_HOST=ollama:11434
+      - CHROMA_HOST=chromadb:8000
     volumes:
       - ./server:/app
-      - chroma_data:/app/.chroma
+      - aura_repos:/root/.aura
     command: uvicorn app.app:app --host 0.0.0.0 --port 8787 --reload
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -23,5 +61,22 @@ services:
       timeout: 10s
       retries: 3
 
+  model-setup:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    command: >
+      sh -c "
+        echo 'Pulling mxbai-embed-large model...' &&
+        ollama pull mxbai-embed-large &&
+        echo 'Model download completed!'
+      "
+    restart: "no"
+
 volumes:
   chroma_data:
+  aura_repos:
+  ollama_data:
