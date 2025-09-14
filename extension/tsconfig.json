@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",          // Modern JS output
+    "module": "ESNext",          // Use ES modules
+    "lib": ["DOM", "ESNext"],    // Include DOM APIs and modern JS features
+    "strict": true,              // Enable strict type checking
+    "types": ["chrome"],         // Load Chrome extension types
+    "outDir": "dist",            // Output folder for compiled JS
+    "esModuleInterop": true
+  },
+  "include": ["src/**/*"]         // Include all your TS files
+}
