@@ -2,8 +2,10 @@ import uuid
 from fastapi import FastAPI, Depends, HTTPException
 from dotenv import load_dotenv
 from app.schemas import IngestReq, HoverReq, HoverResp, SelectReq, SelectResp, CloneReq, CloneResp
-from app.deps import require_auth, jobs_store
-from app import vectordb as retrieval, prompts, cerebras_client as cb
+# from app.deps import require_auth, jobs_store
+from app import vectordb as retrieval
+from app import cerebras_client as cb
+from app import prompt
 
 # Load environment variables from .env file
 load_dotenv()
@@ -11,19 +13,20 @@ load_dotenv()
 app = FastAPI()
 
 @app.post("/ingest")
-def ingest(req: IngestReq, _=Depends(require_auth)):
-    job_id = str(uuid.uuid4())
-    jobs = jobs_store()
-    jobs[job_id] = {
-        "status": "queued",
-        "repo": req.repo,
-        "prNumber": req.prNumber,
-        "head_sha": req.head_sha,
-        "base_sha": req.base_sha,
-    }
-    # In real deploy: push to Redis/BullMQ/RQ; worker consumes job_id.
-    # For demo, we pretend it's queued and ask the worker CLI to process.
-    return {"ok": True, "jobId": job_id}
+def ingest(req: IngestReq):
+    pass
+    # job_id = str(uuid.uuid4())
+    # jobs = jobs_store()
+    # jobs[job_id] = {
+    #     "status": "queued",
+    #     "repo": req.repo,
+    #     "prNumber": req.prNumber,
+    #     "head_sha": req.head_sha,
+    #     "base_sha": req.base_sha,
+    # }
+    # # In real deploy: push to Redis/BullMQ/RQ; worker consumes job_id.
+    # # For demo, we pretend it's queued and ask the worker CLI to process.
+    # return {"ok": True, "jobId": job_id}
 
 @app.get("/status")
 def status(repo: str, prNumber: int, commit: str):
@@ -41,38 +44,16 @@ def status(repo: str, prNumber: int, commit: str):
 @app.post("/select", response_model=SelectResp)
 def select_code(req: SelectReq):
     try:
-        # Prepare the prompt for code explanation
-        system_prompt = (
-            "You are an expert code reviewer and explainer. "
-            "Analyze the selected code and provide a clear, concise explanation "
-            "covering its purpose, functionality, and any important details."
+        
+        # we might be able to pass the context in here!
+        messages = prompt.build_messages(
+            repo=f"{req.owner}/{req.repo}",
+            file=req.file,
+            lang=req.language,
+            selected=req.selected_text,
+            # related_snips=req.related_snippets
         )
-        
-        user_prompt = f"""Please explain the following selected code:
 
-**File:** {req.file}
-**Language:** {req.language or 'unknown'}
-**Repository:** {req.owner}/{req.repo}
-
-**Selected Code:**
-```{req.language or 'text'}
-{req.selected_text}
-```
-
-Please provide:
-1. What this code does
-2. Key functionality and purpose
-3. Any important parameters, inputs, or outputs
-4. Potential issues or considerations
-5. How it fits into the broader codebase context
-
-Keep the explanation clear and concise, suitable for a code review."""
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-        
         # Call Cerebras inference (streaming)
         stream = cb.stream_summary(messages, max_tokens=1000, temperature=0.3)
         
@@ -105,7 +86,8 @@ Keep the explanation clear and concise, suitable for a code review."""
 **Note:** Unable to generate AI explanation due to error: {str(e)}
 
 This appears to be code from the {req.owner}/{req.repo} repository. 
-Please review the selected code manually for its functionality and purpose."""
+Please review the selected code manually for its functionality and purpose.
+"""
         
         return SelectResp(
             explanation=fallback_explanation,

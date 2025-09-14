@@ -16,7 +16,7 @@ def get_client() -> Cerebras:
 def stream_summary(messages, max_tokens=800, temperature=0.2, top_p=0.95):
     try:
         client = get_client()
-        model = os.environ.get("CEREBRAS_MODEL", " qwen-3-235b-a22b-instruct-2507")
+        model = os.environ.get("CEREBRAS_MODEL", "qwen-3-235b-a22b-instruct-2507")
         return client.chat.completions.create(
             model=model,
             messages=messages,
