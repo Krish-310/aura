@@ -7,3 +7,6 @@ redis==5.0.7
 cerebras-cloud-sdk
 chromadb
 sentence-transformers
+langchain
+langchain-community
+ollama

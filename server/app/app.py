@@ -8,6 +8,7 @@ from app import prompt
 from fastapi.responses import StreamingResponse
 from app import stream
 import json
+from app.ingest import ingest_repo
 
 # Load environment variables from .env file (project root)
 load_dotenv(dotenv_path="../.env")
@@ -133,6 +134,8 @@ def clone_repository(req: CloneReq):
         
         if result.returncode != 0:
             raise Exception(f"Git clone failed: {result.stderr}")
+        
+        ingest_repo(str(repo_path))
         
         return CloneResp(
             success=True,
