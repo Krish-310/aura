@@ -6,33 +6,83 @@ const css = `
 .text-selection-tooltip {
   position: absolute;
   background-color: #ffffff;
-  border: 1px solid #e1e5e9;
-  border-radius: 6px;
-  padding: 12px 16px;
+  border: 1px solid #d1d9e0;
+  border-radius: 12px;
+  padding: 16px 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.5;
   color: #24292f;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 2147483647;
-  max-width: 600px;
-  max-height: 80vh;
+  max-width: 480px;
+  max-height: 70vh;
   word-wrap: break-word;
   white-space: pre-wrap;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
   opacity: 0;
-  transition: opacity 0.2s ease-in-out;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(-8px) scale(0.95);
   overflow-y: auto;
   overflow-x: hidden;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .text-selection-tooltip.show {
   opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.text-selection-tooltip.tooltip-above::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid #ffffff;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.text-selection-tooltip.tooltip-below::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid #ffffff;
+  filter: drop-shadow(0 -2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .text-selection-tooltip.loading {
-  opacity: 0.7;
+  opacity: 0.9;
+}
+
+.text-selection-tooltip.loading::after {
+  content: '';
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e1e5e9;
+  border-top: 2px solid #0969da;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .text-selection-tooltip::-webkit-scrollbar {
@@ -138,10 +188,23 @@ const css = `
 
 @media (prefers-color-scheme: dark) {
   .text-selection-tooltip {
-    background-color: #21262d;
-    border-color: #30363d;
+    background-color: #1c2128;
+    border-color: #373e47;
     color: #f0f6fc;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .text-selection-tooltip.tooltip-above::before {
+    border-top-color: #1c2128;
+  }
+  
+  .text-selection-tooltip.tooltip-below::before {
+    border-bottom-color: #1c2128;
+  }
+  
+  .text-selection-tooltip.loading::after {
+    border-color: #373e47;
+    border-top-color: #58a6ff;
   }
   
   .text-selection-tooltip code {
@@ -238,17 +301,25 @@ function createTooltip() {
   return tooltip;
 }
 
-// Show loading state
+// Show loading state with better UX
 function showLoading() {
   const tooltip = createTooltip();
-  tooltip.textContent = "Analyzing code and loading repository context...";
+  tooltip.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 12px; color: #656d76;">
+      <div style="font-weight: 500;">Analyzing code...</div>
+    </div>
+  `;
   tooltip.className = "text-selection-tooltip loading";
   tooltip.style.display = "block";
-  tooltip.style.opacity = "1";
-  positionTooltip();
+  
+  // Smooth fade-in animation
+  requestAnimationFrame(() => {
+    tooltip.classList.add('show');
+    positionTooltip();
+  });
 }
 
-// Show explanation with markdown-like formatting
+// Show explanation with enhanced formatting and animation
 function showExplanation(explanation) {
   const tooltip = createTooltip();
 
@@ -269,53 +340,87 @@ function showExplanation(explanation) {
     // Convert line breaks
     .replace(/\n/g, "<br>");
 
+  // Remove loading class and add content
+  tooltip.classList.remove('loading');
   tooltip.innerHTML = htmlContent;
   tooltip.className = "text-selection-tooltip show";
   tooltip.style.display = "block";
-  tooltip.style.opacity = "1";
-  positionTooltip();
+  
+  // Smooth transition from loading to content
+  requestAnimationFrame(() => {
+    positionTooltip();
+  });
 }
 
-// Position tooltip above selection
+// Position tooltip intelligently near selection
 function positionTooltip() {
   if (!tooltip || !currentSelection) return;
 
   const range = currentSelection.getRangeAt(0);
   const rect = range.getBoundingClientRect();
-  const tooltipRect = tooltip.getBoundingClientRect();
-  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-
-  const left = rect.left + scrollLeft + rect.width / 2 - tooltipRect.width / 2;
-  const top = rect.top + scrollTop - tooltipRect.height - 12;
-
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  let finalLeft = Math.max(
-    8,
-    Math.min(left, viewportWidth - tooltipRect.width - 8)
-  );
-  let finalTop = Math.max(8, top);
-
-  // If tooltip would go above viewport, show it below the selection
-  if (finalTop < 8) {
-    finalTop = rect.bottom + scrollTop + 12;
-  }
-
-  // If tooltip would go below viewport, adjust position
-  if (finalTop + tooltipRect.height > viewportHeight + scrollTop) {
-    finalTop = viewportHeight + scrollTop - tooltipRect.height - 8;
-  }
-
-  tooltip.style.left = finalLeft + "px";
-  tooltip.style.top = finalTop + "px";
+  
+  // Wait for tooltip to be rendered to get accurate dimensions
+  requestAnimationFrame(() => {
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Calculate preferred position (above selection, centered)
+    let preferredLeft = rect.left + scrollLeft + (rect.width / 2) - (tooltipRect.width / 2);
+    let preferredTop = rect.top + scrollTop - tooltipRect.height - 16;
+    
+    // Adjust horizontal position to stay within viewport
+    let finalLeft = Math.max(12, Math.min(preferredLeft, viewportWidth - tooltipRect.width - 12));
+    
+    // Determine if we should show above or below selection
+    let finalTop = preferredTop;
+    let showBelow = false;
+    
+    // If tooltip would be cut off at the top, show it below
+    if (preferredTop < scrollTop + 12) {
+      finalTop = rect.bottom + scrollTop + 16;
+      showBelow = true;
+    }
+    
+    // If showing below would cut off at bottom, try to fit above with adjustment
+    if (showBelow && (finalTop + tooltipRect.height > scrollTop + viewportHeight - 12)) {
+      // Try to fit above by reducing the gap
+      const aboveTop = rect.top + scrollTop - tooltipRect.height - 8;
+      if (aboveTop >= scrollTop + 12) {
+        finalTop = aboveTop;
+        showBelow = false;
+      } else {
+        // Keep it below but adjust to fit
+        finalTop = Math.max(scrollTop + 12, scrollTop + viewportHeight - tooltipRect.height - 12);
+      }
+    }
+    
+    // Apply smooth positioning with transform for better performance
+    tooltip.style.position = 'absolute';
+    tooltip.style.left = finalLeft + 'px';
+    tooltip.style.top = finalTop + 'px';
+    tooltip.style.transform = 'translateZ(0)'; // Force hardware acceleration
+    
+    // Add visual indicator of tooltip direction
+    tooltip.classList.toggle('tooltip-below', showBelow);
+    tooltip.classList.toggle('tooltip-above', !showBelow);
+  });
 }
 
-// Hide the tooltip
+// Hide the tooltip with smooth animation
 function hideTooltip() {
   if (tooltip) {
-    tooltip.style.display = "none";
+    tooltip.classList.remove('show');
+    tooltip.classList.remove('tooltip-above', 'tooltip-below');
+    
+    // Wait for animation to complete before hiding
+    setTimeout(() => {
+      if (tooltip) {
+        tooltip.style.display = "none";
+      }
+    }, 250);
   }
   currentSelection = null;
   isLoading = false;
@@ -419,7 +524,7 @@ function getLanguageFromFile(filename) {
   return langMap[ext] || "text";
 }
 
-// Handle text selection
+// Handle text selection with improved UX
 async function handleSelection() {
   if (!isGitHubPage()) {
     hideTooltip();
@@ -434,6 +539,13 @@ async function handleSelection() {
 
   if (selection && selection.toString().trim() !== "") {
     const selectedText = selection.toString().trim();
+    
+    // Only process selections with meaningful content (more than 3 characters)
+    if (selectedText.length < 4) {
+      hideTooltip();
+      return;
+    }
+    
     const repoInfo = getRepoInfo();
 
     if (!repoInfo) {
@@ -445,17 +557,29 @@ async function handleSelection() {
     console.log("Showing explanation for:", selectedText);
     console.log("Repo info:", repoInfo);
 
+    // Prevent multiple simultaneous requests
+    if (isLoading) {
+      return;
+    }
+    
+    isLoading = true;
     currentSelection = selection;
     showLoading();
 
     try {
       const explanation = await explainCode(selectedText, repoInfo);
-      showExplanation(explanation);
+      if (currentSelection === selection) { // Only show if selection hasn't changed
+        showExplanation(explanation);
+      }
     } catch (error) {
       console.error("Error getting explanation:", error);
-      showExplanation(
-        "**Error:** Could not analyze code. Please check the console for details."
-      );
+      if (currentSelection === selection) {
+        showExplanation(
+          "**Error:** Could not analyze code. Please check the console for details."
+        );
+      }
+    } finally {
+      isLoading = false;
     }
   } else {
     console.log("Hiding tooltip");
