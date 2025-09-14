@@ -12,6 +12,8 @@ interface CloneRequest {
 interface CloneResponse {
   success: boolean;
   error?: string;
+  message?: string;
+  localPath?: string;
 }
 
 // Handle messages from popup and content scripts
@@ -53,53 +55,16 @@ async function handleCloneRepository(repoInfo: { owner: string; repo: string; ur
 
     const result = await response.json();
     
-    // Also trigger browser download as fallback
-    await downloadRepositoryZip(repoInfo);
-    
-    return { success: true };
+    return { 
+      success: true,
+      message: result.message,
+      localPath: result.local_path
+    };
   } catch (error) {
     console.error('Error cloning repository:', error);
-    
-    // Fallback to browser download only
-    try {
-      await downloadRepositoryZip(repoInfo);
-      return { success: true };
-    } catch (downloadError) {
-      return { 
-        success: false, 
-        error: `Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}` 
-      };
-    }
+    return { 
+      success: false, 
+      error: `Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    };
   }
-}
-
-// Download repository as ZIP file
-async function downloadRepositoryZip(repoInfo: { owner: string; repo: string }): Promise<void> {
-  const downloadUrls = [
-    `https://github.com/${repoInfo.owner}/${repoInfo.repo}/archive/refs/heads/main.zip`,
-    `https://github.com/${repoInfo.owner}/${repoInfo.repo}/archive/refs/heads/master.zip`
-  ];
-
-  for (const url of downloadUrls) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        (chrome.downloads as any).download({ 
-          url,
-          filename: `${repoInfo.repo}.zip`
-        }, (downloadId: number) => {
-          if ((chrome.runtime as any).lastError) {
-            reject(new Error((chrome.runtime as any).lastError.message));
-          } else {
-            resolve();
-          }
-        });
-      });
-      return; // Success, exit the loop
-    } catch (error) {
-      console.log(`Failed to download from ${url}, trying next...`);
-      continue;
-    }
-  }
-  
-  throw new Error('Failed to download repository from any branch');
 }

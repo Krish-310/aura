@@ -96,14 +96,16 @@ Please review the selected code manually for its functionality and purpose.
 
 @app.post("/clone", response_model=CloneResp)
 def clone_repository(req: CloneReq):
-    """Clone a GitHub repository to the server"""
+    """Clone a GitHub repository to the server - updated"""
     try:
         import subprocess
         import os
+        import shutil
         from pathlib import Path
         
-        # Create repos directory if it doesn't exist
-        repos_dir = Path("/tmp/aura_repos")
+        # Create ~/.aura directory if it doesn't exist
+        home_dir = Path.home()
+        repos_dir = home_dir / ".aura"
         repos_dir.mkdir(exist_ok=True)
         
         # Construct repository path
@@ -111,16 +113,34 @@ def clone_repository(req: CloneReq):
         
         # Remove existing directory if it exists
         if repo_path.exists():
-            import shutil
             shutil.rmtree(repo_path)
         
         # Clone the repository
         clone_url = f"https://github.com/{req.owner}/{req.repo}.git"
+        
+        # Find git executable - try common macOS locations first
+        git_path = None
+        for path in ["/opt/homebrew/bin/git", "/usr/local/bin/git", "/usr/bin/git"]:
+            if os.path.exists(path):
+                git_path = path
+                break
+        
+        if not git_path:
+            git_path = shutil.which("git")
+        
+        if not git_path:
+            raise Exception("Git executable not found. Please ensure git is installed and in PATH.")
+        
+        # Set up environment with proper PATH
+        env = os.environ.copy()
+        env['PATH'] = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:' + env.get('PATH', '')
+        
         result = subprocess.run(
-            ["git", "clone", clone_url, str(repo_path)],
+            [git_path, "clone", clone_url, str(repo_path)],
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=300,  # 5 minute timeout
+            env=env
         )
         
         if result.returncode != 0:

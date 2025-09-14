@@ -102,7 +102,10 @@ async function handleCloneRepositoryClick() {
     });
 
     if (response && response.success) {
-      showStatus('Repository cloning initiated successfully!', 'success');
+      const message = response.localPath 
+        ? `Repository cloned successfully to: ${response.localPath}`
+        : 'Repository cloned successfully to ~/.aura directory';
+      showStatus(message, 'success');
     } else {
       showStatus(`Error: ${response?.error || 'Unknown error'}`, 'error');
     }
