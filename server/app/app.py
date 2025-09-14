@@ -12,22 +12,6 @@ load_dotenv()
 
 app = FastAPI()
 
-@app.post("/ingest")
-def ingest(req: IngestReq):
-    pass
-    # job_id = str(uuid.uuid4())
-    # jobs = jobs_store()
-    # jobs[job_id] = {
-    #     "status": "queued",
-    #     "repo": req.repo,
-    #     "prNumber": req.prNumber,
-    #     "head_sha": req.head_sha,
-    #     "base_sha": req.base_sha,
-    # }
-    # # In real deploy: push to Redis/BullMQ/RQ; worker consumes job_id.
-    # # For demo, we pretend it's queued and ask the worker CLI to process.
-    # return {"ok": True, "jobId": job_id}
-
 @app.get("/status")
 def status(repo: str, prNumber: int, commit: str):
     # In a real system, check DB state for (repo, prNumber, commit).
@@ -103,7 +87,7 @@ def clone_repository(req: CloneReq):
         import shutil
         from pathlib import Path
         
-        # Create ~/.aura directory if it doesn't exist
+        # Use ~/.aura directory (works both locally and in Docker)
         home_dir = Path.home()
         repos_dir = home_dir / ".aura"
         repos_dir.mkdir(exist_ok=True)
@@ -118,29 +102,17 @@ def clone_repository(req: CloneReq):
         # Clone the repository
         clone_url = f"https://github.com/{req.owner}/{req.repo}.git"
         
-        # Find git executable - try common macOS locations first
-        git_path = None
-        for path in ["/opt/homebrew/bin/git", "/usr/local/bin/git", "/usr/bin/git"]:
-            if os.path.exists(path):
-                git_path = path
-                break
-        
-        if not git_path:
-            git_path = shutil.which("git")
-        
+        # Use git from PATH (works in Docker container)
+        git_path = shutil.which("git")
         if not git_path:
             raise Exception("Git executable not found. Please ensure git is installed and in PATH.")
         
-        # Set up environment with proper PATH
-        env = os.environ.copy()
-        env['PATH'] = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:' + env.get('PATH', '')
-        
         result = subprocess.run(
-            [git_path, "clone", clone_url, str(repo_path)],
+            ["git", "clone", clone_url, str(repo_path)],
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout
-            env=env
+            cwd=str(repos_dir.parent)  # Set working directory to home
         )
         
         if result.returncode != 0:

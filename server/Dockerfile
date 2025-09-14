@@ -1,10 +1,12 @@
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies including SQLite for ChromaDB
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
     git \
+    sqlite3 \
+    libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -21,6 +23,17 @@ RUN pip install --no-cache-dir sentence-transformers
 
 # Copy application code
 COPY . .
+
+# Create ChromaDB data directory and ~/.aura directory for repositories
+RUN mkdir -p /app/.chroma && \
+    chmod 755 /app/.chroma && \
+    mkdir -p /root/.aura && \
+    chmod 755 /root/.aura
+
+# Set environment variables for ChromaDB
+ENV CHROMA_PATH=/app/.chroma
+ENV EMBED_MODEL=mixedbread-ai/mxbai-embed-large-v1
+ENV TOP_K=8
 
 # Expose port
 EXPOSE 8787
