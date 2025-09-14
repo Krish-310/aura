@@ -1,0 +1,29 @@
+version: "3.8"
+services:
+  api:
+    build: .
+    command: uvicorn app.app:app --host 0.0.0.0 --port 8787 --reload
+    environment:
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
+      CEREBRAS_MODEL: qwen-3-235b-a22b-instruct-2507
+      CHROMA_PATH: /data/chroma
+    volumes:
+      - ..:/app
+      - chroma:/data/chroma
+    ports: ["8787:8787"]
+
+  # Run the worker ad-hoc with env vars per PR (or wire to a queue).
+  # Example:
+  # docker compose run --rm worker env REPO=owner/name PR_NUM=7 COMMIT=<sha> GIT_URL=https://.../name.git
+  worker:
+    build: .
+    entrypoint: ["python", "workers/indexer.py"]
+    environment:
+      CHROMA_PATH: /data/chroma
+      EMBED_MODEL: mixedbread-ai/mxbai-embed-large-v1
+    volumes:
+      - ..:/app
+      - chroma:/data/chroma
+
+volumes:
+  chroma:
