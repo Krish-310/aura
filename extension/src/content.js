@@ -934,6 +934,10 @@ async function handleSelection() {
               false
             );
           }
+        },
+        onContext: (context) => {
+          contextInfo = context;
+          console.log("[explain] Context information received:", context);
         }
       });
     } catch (error) {
