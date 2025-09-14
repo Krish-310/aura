@@ -32,3 +32,13 @@ class SelectReq(BaseModel):
 class SelectResp(BaseModel):
     explanation: str
     related_code: Optional[List[Dict[str, Any]]] = None
+
+class CloneReq(BaseModel):
+    owner: str
+    repo: str
+    url: str
+
+class CloneResp(BaseModel):
+    success: bool
+    message: str
+    local_path: Optional[str] = None

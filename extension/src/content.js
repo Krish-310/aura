@@ -505,8 +505,38 @@ function init() {
   // Hide tooltip when page unloads
   window.addEventListener("beforeunload", hideTooltip);
 
+  // Add a "Clone" button to the page
+  addCloneButton();
+
   console.log("Event listeners attached successfully");
 }
+
+// Add a "Clone" button to the page
+function addCloneButton() {
+  if (!isGitHubRepoPage()) {
+    return;
+  }
+
+  const buttonContainer = document.querySelector('.d-flex.flex-wrap.flex-justify-end.ml-auto');
+  if (buttonContainer) {
+    const cloneButton = document.createElement('button');
+    cloneButton.className = 'btn btn-sm btn-primary ml-2';
+    cloneButton.textContent = 'Clone';
+    cloneButton.addEventListener('click', () => {
+      const repoUrl = window.location.href;
+      chrome.runtime.sendMessage({ action: 'cloneRepo', repoUrl: repoUrl });
+    });
+    buttonContainer.appendChild(cloneButton);
+  }
+}
+
+// Check if we're on a GitHub repository page
+function isGitHubRepoPage() {
+  const repoNav = document.querySelector('nav[aria-label="Repository"]');
+  return repoNav !== null;
+}
+
+
 
 // Start the extension
 if (document.readyState === "loading") {
