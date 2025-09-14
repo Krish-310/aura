@@ -12,18 +12,5 @@ services:
       - chroma:/data/chroma
     ports: ["8787:8787"]
 
-  # Run the worker ad-hoc with env vars per PR (or wire to a queue).
-  # Example:
-  # docker compose run --rm worker env REPO=owner/name PR_NUM=7 COMMIT=<sha> GIT_URL=https://.../name.git
-  worker:
-    build: .
-    entrypoint: ["python", "workers/indexer.py"]
-    environment:
-      CHROMA_PATH: /data/chroma
-      EMBED_MODEL: mixedbread-ai/mxbai-embed-large-v1
-    volumes:
-      - ..:/app
-      - chroma:/data/chroma
-
 volumes:
   chroma:
