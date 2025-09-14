@@ -1,0 +1,17 @@
+# root
+.env
+*.log
+
+# node
+node_modules
+*.tsbuildinfo
+
+# python
+__pycache__/
+.venv/
+.pytest_cache/
+
+# build outputs
+extension/dist
+extension/.vite
+server/.cache

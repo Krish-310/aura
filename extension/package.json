@@ -1,0 +1,17 @@
+{
+    "name": "github-hover-ai-extension",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite --watch",
+        "build": "vite build"
+    },
+    "devDependencies": {
+        "typescript": "^5.5.4",
+        "vite": "^5.4.0"
+    },
+    "dependencies": {
+        "@floating-ui/dom": "^1.6.7"
+    }
+}
