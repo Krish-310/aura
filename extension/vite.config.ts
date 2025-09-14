@@ -7,10 +7,14 @@ export default defineConfig({
     rollupOptions: {
       input: {
         content: "src/content.js",
+        background: "src/background.ts",
+        content_index: "src/content/index.ts",
+        popup: "src/popup.ts",
       },
       output: {
-        entryFileNames: (chunk) => `${chunk.name}.js`,
-        format: "iife", // Use IIFE format for content scripts
+        entryFileNames: `[name].js`,
+        chunkFileNames: `[name].js`,
+        assetFileNames: `[name].[ext]`
       },
     },
   },

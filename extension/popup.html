@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aura Extension</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 16px;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      background: #ffffff;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      color: #0366d6;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      color: #586069;
+      font-size: 12px;
+    }
+    
+    .section {
+      margin-bottom: 16px;
+      padding: 12px;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+    }
+    
+    .section-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #24292f;
+    }
+    
+    .clone-section {
+      background: #f6f8fa;
+    }
+    
+    .clone-button {
+      width: 100%;
+      padding: 8px 16px;
+      background: #0366d6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .clone-button:hover {
+      background: #0256cc;
+    }
+    
+    .clone-button:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+    
+    .status {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .status.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    
+    .repo-info {
+      font-size: 12px;
+      color: #586069;
+      margin-bottom: 12px;
+    }
+    
+    .settings {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #e1e4e8;
+    }
+    
+    .input-group {
+      margin-bottom: 12px;
+    }
+    
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #24292f;
+    }
+    
+    .input-group input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 4px;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+    
+    .save-button {
+      width: 100%;
+      padding: 6px 12px;
+      background: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    
+    .save-button:hover {
+      background: #218838;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">Aura</div>
+    <div class="subtitle">GitHub Code Explainer & Cloner</div>
+  </div>
+
+  <div class="section clone-section">
+    <div class="section-title">Repository Cloning</div>
+    <div id="repo-info" class="repo-info">Not on a GitHub repository page</div>
+    <button id="clone-button" class="clone-button" disabled>Clone Repository</button>
+    <div id="clone-status" class="status" style="display: none;"></div>
+  </div>
+
+  <div class="settings">
+    <div class="section-title">Settings</div>
+    <div class="input-group">
+      <label for="server-url">Server URL:</label>
+      <input type="text" id="server-url" placeholder="http://localhost:8787" />
+    </div>
+    <button id="save-settings" class="save-button">Save Settings</button>
+  </div>
+
+  <script src="dist/popup.js"></script>
+</body>
+</html>

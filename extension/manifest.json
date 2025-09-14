@@ -1,14 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "GitHub Code Explainer",
-  "version": "0.1.0",
-  "description": "Explains selected code using repository context from ChromaDB.",
-  "permissions": ["activeTab"],
+  "name": "Aura - GitHub Code Explainer & Cloner",
+  "version": "0.2.0",
+  "description": "Explains selected code using repository context and clones GitHub repositories.",
+  "permissions": ["activeTab", "downloads", "storage", "scripting"],
+  "host_permissions": ["https://github.com/*", "http://localhost:*"],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://github.com/*"],
-      "js": ["dist/content.js"],
+      "js": ["dist/content.js", "dist/content_index.js"],
+      "css": ["dist/content.css"],
       "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Aura Extension"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["dist/*"],
+      "matches": ["https://github.com/*"]
     }
   ]
 }

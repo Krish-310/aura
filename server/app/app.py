@@ -1,7 +1,7 @@
 import uuid
 from fastapi import FastAPI, Depends, HTTPException
 from dotenv import load_dotenv
-from app.schemas import IngestReq, HoverReq, HoverResp, SelectReq, SelectResp
+from app.schemas import IngestReq, HoverReq, HoverResp, SelectReq, SelectResp, CloneReq, CloneResp
 from app.deps import require_auth, jobs_store
 from app import vectordb as retrieval, prompts, cerebras_client as cb
 
@@ -110,6 +110,57 @@ Please review the selected code manually for its functionality and purpose."""
         return SelectResp(
             explanation=fallback_explanation,
             related_code=None
+        )
+
+@app.post("/clone", response_model=CloneResp)
+def clone_repository(req: CloneReq):
+    """Clone a GitHub repository to the server"""
+    try:
+        import subprocess
+        import os
+        from pathlib import Path
+        
+        # Create repos directory if it doesn't exist
+        repos_dir = Path("/tmp/aura_repos")
+        repos_dir.mkdir(exist_ok=True)
+        
+        # Construct repository path
+        repo_path = repos_dir / f"{req.owner}_{req.repo}"
+        
+        # Remove existing directory if it exists
+        if repo_path.exists():
+            import shutil
+            shutil.rmtree(repo_path)
+        
+        # Clone the repository
+        clone_url = f"https://github.com/{req.owner}/{req.repo}.git"
+        result = subprocess.run(
+            ["git", "clone", clone_url, str(repo_path)],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode != 0:
+            raise Exception(f"Git clone failed: {result.stderr}")
+        
+        return CloneResp(
+            success=True,
+            message=f"Repository {req.owner}/{req.repo} cloned successfully",
+            local_path=str(repo_path)
+        )
+        
+    except subprocess.TimeoutExpired:
+        return CloneResp(
+            success=False,
+            message="Repository cloning timed out (5 minutes)",
+            local_path=None
+        )
+    except Exception as e:
+        return CloneResp(
+            success=False,
+            message=f"Failed to clone repository: {str(e)}",
+            local_path=None
         )
 
 # Add CORS middleware for extension
