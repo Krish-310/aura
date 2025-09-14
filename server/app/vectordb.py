@@ -7,9 +7,17 @@ def collection_name(repo: str, pr_number: int, commit: str) -> str:
 
 def get_or_create_collection(name: str):
     """Get or create a ChromaDB collection."""
-    chroma_host = os.getenv('CHROMA_HOST', 'localhost:8000')
-    host, port = chroma_host.split(':')
-    client = chromadb.HttpClient(host=host, port=int(port))
+    client = None
+    try:
+        # Try HTTP client first
+        client = chromadb.HttpClient(host='localhost', port=8000)
+        client.heartbeat()
+    except Exception as http_error:
+        try:
+            # Fallback to persistent client
+            client = chromadb.PersistentClient(path="./chroma")
+        except Exception as persistent_error:
+            raise Exception(f"Could not connect to ChromaDB. HTTP error: {http_error}, Persistent error: {persistent_error}")
     
     try:
         # Try to get existing collection
@@ -22,9 +30,17 @@ def get_or_create_collection(name: str):
 
 def search_similar_code(collection_name: str, query: str, n_results: int = 5):
     """Search for similar code snippets in the collection."""
-    chroma_host = os.getenv('CHROMA_HOST', 'localhost:8000')
-    host, port = chroma_host.split(':')
-    client = chromadb.HttpClient(host=host, port=int(port))
+    client = None
+    try:
+        # Try HTTP client first
+        client = chromadb.HttpClient(host='localhost', port=8000)
+        client.heartbeat()
+    except Exception as http_error:
+        try:
+            # Fallback to persistent client
+            client = chromadb.PersistentClient(path="./chroma")
+        except Exception as persistent_error:
+            raise Exception(f"Could not connect to ChromaDB. HTTP error: {http_error}, Persistent error: {persistent_error}")
     
     try:
         collection = client.get_collection(name=collection_name)

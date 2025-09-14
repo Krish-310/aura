@@ -141,6 +141,28 @@
     .save-button:hover {
       background: #218838;
     }
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e1e4e8;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: #0366d6;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    
+    .progress-text {
+      text-align: center;
+      font-size: 11px;
+      margin-top: 4px;
+      color: #586069;
+    }
   </style>
 </head>
 <body>
@@ -154,6 +176,20 @@
     <div id="repo-info" class="repo-info">Not on a GitHub repository page</div>
     <button id="clone-button" class="clone-button" disabled>Clone Repository</button>
     <div id="clone-status" class="status" style="display: none;"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Vectorization</div>
+    <div id="vectorization-info" class="repo-info">Repository must be cloned first</div>
+    <button id="vectorize-button" class="clone-button" disabled>Start Vectorization</button>
+    <div id="vectorization-status" class="status" style="display: none;"></div>
+    <div id="progress-container" style="display: none; margin-top: 8px;">
+      <div class="progress-bar">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <div id="progress-text" class="progress-text">0%</div>
+    </div>
+    <div id="vectorization-details" style="display: none; margin-top: 8px; font-size: 11px; color: #586069;"></div>
   </div>
 
   <div class="settings">

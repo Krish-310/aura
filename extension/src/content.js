@@ -376,8 +376,8 @@ function showLoading() {
   });
 }
 
-// Show explanation with dynamic height expansion
-function showExplanation(explanation, isStreaming = false) {
+// Show explanation with enhanced formatting and dynamic height expansion
+function showExplanation(explanation, isStreaming = false, contextInfo = null) {
   const tooltip = createTooltip();
 
   // Convert markdown-like formatting to HTML
@@ -397,6 +397,29 @@ function showExplanation(explanation, isStreaming = false) {
     // Convert line breaks
     .replace(/\n/g, "<br>");
 
+  // Add context indicator if context was used
+  let contextIndicator = '';
+  if (contextInfo && contextInfo.snippets_found > 0) {
+    const avgSimilarity = (contextInfo.avg_similarity * 100).toFixed(1);
+    contextIndicator = `
+      <div class="context-indicator" style="
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 1px solid #90caf9;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-bottom: 12px;
+        font-size: 11px;
+        color: #1565c0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      ">
+        <span style="font-weight: 600;">🔍 Enhanced with ${contextInfo.snippets_found} related code snippets</span>
+        <span style="opacity: 0.8;">(${avgSimilarity}% similarity)</span>
+      </div>
+    `;
+  }
+
   // Add streaming cursor if still streaming
   if (isStreaming) {
     htmlContent += '<span class="streaming-cursor"></span>';
@@ -404,7 +427,7 @@ function showExplanation(explanation, isStreaming = false) {
 
   // Create content container - ensure it's contained within tooltip
   const contentClass = isStreaming ? 'tooltip-content streaming' : 'tooltip-content';
-  tooltip.innerHTML = `<div class="${contentClass}">${htmlContent}</div>`;
+  tooltip.innerHTML = `<div class="${contentClass}">${contextIndicator}${htmlContent}</div>`;
   tooltip.className = "text-selection-tooltip show";
   tooltip.style.display = "block";
   tooltip.style.overflow = "hidden"; // Force containment
@@ -623,29 +646,33 @@ async function safeReadText(response) {
 }
 
 // Helper function to handle JSON streaming responses
-function handleJSONish(payload, onDelta, onDone, onError) {
+function handleJSONish(payload, onDelta, onDone, onError, onContext) {
   try {
     // Only try to parse if payload looks like JSON
     if (payload.trim().startsWith("{") || payload.trim().startsWith("[")) {
       const data = JSON.parse(payload);
-      if (data.delta) {
-        onDelta(data.delta);
-      } else if (data.done) {
+      console.log("[explain] Received streaming data:", data);
+
+      if (data.type === "delta" && data.content) {
+        onDelta(data.content);
+      } else if (data.type === "context") {
+        console.log("[explain] Context info received:", data);
+        onContext(data);
+      } else if (data.type === "done") {
+        console.log("[explain] Stream completed");
         onDone();
-      } else if (data.error) {
-        onError(data.error);
-      } else if (data.explanation) {
-        onDelta(data.explanation);
-        onDone();
+      } else if (data.type === "error") {
+        console.error("[explain] Server error:", data.error);
+        onError(new Error(data.error));
       }
-    } else if (payload.trim()) {
-      // Treat as plain text
+    } else {
+      // Not JSON, treat as plain text delta
       onDelta(payload);
     }
-  } catch (e) {
-    if (payload.trim()) {
-      onDelta(payload);
-    }
+  } catch (parseError) {
+    console.warn("[explain] Failed to parse JSON, treating as text:", parseError);
+    // If JSON parsing fails, treat as plain text
+    onDelta(payload);
   }
 }
 
@@ -654,7 +681,7 @@ export async function explainCode(
   repoInfo,
   handlers = {}
 ) {
-  const { onDelta = () => {}, onDone = () => {}, onError = () => {} } = handlers;
+  const { onDelta = () => {}, onDone = () => {}, onError = () => {}, onContext = () => {} } = handlers;
 
   try {
     // Abort any prior in-flight stream
@@ -678,7 +705,12 @@ export async function explainCode(
       repo: repoInfo.repo,
       sha: repoInfo.sha,
       file: repoInfo.file,
+      selectedTextLength: selectedText.length,
+      language: getLanguageFromFile(repoInfo.file),
     });
+    
+    console.log("[explain] Selected text preview:", selectedText.substring(0, 100) + (selectedText.length > 100 ? "..." : ""));
+    console.log("[explain] Requesting context from ChromaDB collection:", `${repoInfo.owner}_${repoInfo.repo}`);
 
     const resp = await fetch(`${base}/select`, {
       method: "POST",
@@ -707,28 +739,22 @@ export async function explainCode(
     // Streaming buffers
     let buf = "";
     let sseMode = ctype.includes("text/event-stream");
-    let textMode = ctype.includes("text/plain"); // for your old raw text fallback
 
     while (true) {
-      const { value, done } = await reader.read();
+      const { done, value } = await reader.read();
       if (done) break;
 
-      buf += decoder.decode(value, { stream: true });
+      const chunk = decoder.decode(value, { stream: true });
+      buf += chunk;
 
-      // --- Parse loop per protocol ---
       if (sseMode) {
-        // SSE: split by double newline; parse `data: ...` lines
-        let sepIdx;
-        while ((sepIdx = buf.indexOf("\n\n")) !== -1) {
-          const eventChunk = buf.slice(0, sepIdx);
-          buf = buf.slice(sepIdx + 2);
-          const lines = eventChunk.split("\n");
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data:")) continue;
-            const payload = trimmed.slice(5).trim();
-            handleJSONish(payload, onDelta, onDone, onError);
-          }
+        // Server-sent events: split by double newline
+        let dblIdx;
+        while ((dblIdx = buf.indexOf("\n\n")) !== -1) {
+          const event = buf.slice(0, dblIdx).trim();
+          buf = buf.slice(dblIdx + 2);
+          if (!event) continue;
+          handleSSE(event, onDelta, onDone, onError);
         }
       } else if (ctype.includes("application/x-ndjson")) {
         // NDJSON: split by single newline; parse each line
@@ -737,7 +763,7 @@ export async function explainCode(
           const line = buf.slice(0, nlIdx).trim();
           buf = buf.slice(nlIdx + 1);
           if (!line) continue;
-          handleJSONish(line, onDelta, onDone, onError);
+          handleJSONish(line, onDelta, onDone, onError, onContext);
         }
       } else if (textMode || !ctype) {
         // Plain text (or unknown): stream as-is
@@ -859,6 +885,7 @@ async function handleSelection() {
 
     try {
       let explanationText = "";
+      let contextInfo = null;
       let deltaBuffer = "";
       let lastUpdateTime = 0;
       const updateInterval = 50; // ms - throttle updates to prevent text overflow
@@ -875,24 +902,32 @@ async function handleSelection() {
               deltaBuffer = "";
               lastUpdateTime = now;
               
-              // Show explanation with streaming indicator and dynamic height
-              showExplanation(explanationText, true);
+              // Show explanation with streaming indicator and context info
+              showExplanation(explanationText, true, contextInfo);
             }
           }
         },
         onDone: () => {
-          console.log("Explanation complete:", explanationText);
+          console.log("[explain] Explanation complete. Total length:", explanationText.length);
+          console.log("[explain] Final explanation:", explanationText);
+          if (contextInfo) {
+            console.log("[explain] Context used:", contextInfo);
+          }
           if (currentSelection === selection) {
             // Add any remaining buffered text
             if (deltaBuffer) {
               explanationText += deltaBuffer;
             }
             // Remove streaming cursor when done
-            showExplanation(explanationText, false);
+            showExplanation(explanationText, false, contextInfo);
           }
         },
+        onContext: (context) => {
+          contextInfo = context;
+          console.log("[explain] Context information received:", context);
+        },
         onError: (error) => {
-          console.error("Error getting explanation:", error);
+          console.error("[explain] Error getting explanation:", error);
           if (currentSelection === selection) {
             showExplanation(
               "**Error:** Could not analyze code. Please check the console for details.",

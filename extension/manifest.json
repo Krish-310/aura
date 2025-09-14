@@ -4,7 +4,11 @@
   "version": "0.2.0",
   "description": "Explains selected code using repository context and clones GitHub repositories.",
   "permissions": ["activeTab", "downloads", "storage", "scripting"],
-  "host_permissions": ["https://github.com/*", "http://localhost:*"],
+  "host_permissions": [
+    "https://github.com/*",
+    "http://localhost/",
+    "http://localhost:8000/"
+  ],
   "background": {
     "service_worker": "dist/background.js"
   },

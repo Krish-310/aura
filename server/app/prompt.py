@@ -6,15 +6,26 @@ SYSTEM_PROMPT = (
 )
 
 def build_user_prompt(repo:str, file:str, lang:str|None, selected:str, related_snippets:list[dict]=None) -> str:
-    # selected and snippets are inserted verbatim inside delimiters
-    # ctx_blocks = []
-    # for i, s in enumerate(related_snippets[:6], start=1):
-    #     ctx_blocks.append(
-    #         f"<<CONTEXT_SNIPPET {i} {s['file']}:{s['start']}-{s['end']}>>\n"
-    #         f"{s['code']}\n"
-    #         f"<<END_CONTEXT_SNIPPET>>"
-    #     )
-    # ctx = "\n\n".join(ctx_blocks) if ctx_blocks else "(none)"
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Build context blocks from related snippets
+    ctx_blocks = []
+    if related_snippets:
+        logger.info(f"Building context with {len(related_snippets)} related snippets")
+        for i, snippet in enumerate(related_snippets[:6], start=1):
+            similarity_score = snippet.get('similarity_score', 0)
+            content = truncate(snippet.get('content', ''), MAX_CONTEXT_CHARS)
+            logger.info(f"Adding context snippet {i}: similarity {similarity_score:.3f}, length {len(content)} chars")
+            
+            ctx_blocks.append(
+                f"<<CONTEXT_SNIPPET {i} (similarity: {similarity_score:.3f})>>\n"
+                f"{content}\n"
+                f"<<END_CONTEXT_SNIPPET>>"
+            )
+    
+    ctx = "\n\n".join(ctx_blocks) if ctx_blocks else "(No related code context found)"
+    logger.info(f"Final context length: {len(ctx)} characters")
 
     return f"""
 Repository: {repo}
@@ -26,7 +37,7 @@ Language: {lang or 'unknown'}
 <<END_SELECTED_CODE>>
 
 <<RELATED_CONTEXT>>
-"context goes here!"
+{ctx}
 <<END_RELATED_CONTEXT>>
 
 INSTRUCTIONS:
@@ -52,19 +63,33 @@ def truncate(s: str, limit: int) -> str:
 
 
 def build_messages(repo, file, lang, selected, related_snips=None ):
+    import logging
+    logger = logging.getLogger(__name__)
+    
     selected = truncate(selected, MAX_SELECTED_CHARS)
-    # make shallow copies and truncate code
-    # rel = [
-    #     {**s, "code": truncate(s["code"], MAX_CONTEXT_CHARS)}
-    #     for s in related_snips
-    # ]
+    logger.info(f"Building messages for {repo}/{file}, selected text: {len(selected)} chars")
+    
+    # Process related snippets if provided
+    processed_snippets = []
+    if related_snips:
+        logger.info(f"Processing {len(related_snips)} related snippets")
+        processed_snippets = [
+            {
+                **snippet,
+                "content": truncate(snippet.get("content", ""), MAX_CONTEXT_CHARS)
+            }
+            for snippet in related_snips
+        ]
+    
     user = build_user_prompt(
         repo=f"{repo}",
         file=file,
         lang=lang,
         selected=selected,
-        # related_snippets=rel
+        related_snippets=processed_snippets
     )
+    
+    logger.info(f"Final prompt length: {len(user)} characters")
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user},
