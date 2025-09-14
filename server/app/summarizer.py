@@ -1,10 +1,24 @@
 import os
 
-PROMPT = (
-    "You annotate code inline for a GitHub PR reviewer.\n"
-    "Return 2–4 bullets. Be concise and factual.\n\n"
-    "FILE: {file} at {sha}\nLINES: {start}-{end}\nLANG: {lang}\n\nCODE:\n"""\n{code}\n"""\n\nOUTPUT:\n- What it does: ...\n- Key inputs/outputs: ...\n- Edge cases & side effects: ...\n- Change impact (if any): ...\n"
-)
+PROMPT = '''
+Annotate the following code for a GitHub PR reviewer.
+Provide 2–4 concise, factual bullet points.
+
+File: {file} (commit: {sha})
+Lines: {start}-{end}
+Language: {lang}
+
+Code:
+"""
+{code}
+"""
+
+Bullets:
+- Purpose: ...
+- Inputs/Outputs: ...
+- Edge cases/Side effects: ...
+- Impact of changes: ...
+'''
 
 # Stub LLM (replace with OpenAI/Anthropic call)
 async def summarize_code(file: str, sha: str, lang: str, start: int, end: int, code: str) -> str:
